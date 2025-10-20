@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Calendar, Sparkles, Check, Loader2, AlertCircle, LogOut, Clock } from 'lucide-react';
 import { useGoogleLogin } from '@react-oauth/google';
+import { Icon } from './icons';
 import './smart-calendar-app.css';
 
 // Definimos los tipos para mejorar la calidad del código y evitar errores
@@ -20,6 +21,14 @@ type TokenResponse = {
   access_token: string;
 };
 
+interface DayInfo {
+  date: Date;
+  dayName: string;
+  dayNumber: number;
+  isToday: boolean;
+  isSunday: boolean;
+}
+
 export default function SmartCalendarApp() {
   const [input, setInput] = useState('');
   const [isProcessing, setIsProcessing] = useState(false);
@@ -28,6 +37,30 @@ export default function SmartCalendarApp() {
   const [extractedData, setExtractedData] = useState<ExtractedDataState | null>(null);
   const [userEmail, setUserEmail] = useState('');
   const [accessToken, setAccessToken] = useState<string | null>(null);
+  const [weekDays, setWeekDays] = useState<DayInfo[]>([]);
+
+  const iconShortcuts = [
+    { iconName: 'fc:businesswoman', text: 'Gaby ' },
+    { iconName: 'fc:manager', text: 'Fran ' },
+    { iconName: 'fc:reading', text: 'Trini ' },
+    { iconName: 'fc:sports-mode', text: 'Chiara ' },
+    { iconName: 'fc:podium-with-speaker', text: 'médico ' },
+    { iconName: 'fc:like', text: 'cumple ' },
+    { iconName: 'fc:conference-call', text: 'jugar con ' },
+    { iconName: 'fc:home', text: 'en casa ' },
+    { iconName: 'fc:music', text: 'coro ' },
+    { iconName: 'fc:dancer', text: 'danza ' },
+    { iconName: 'fc:services', text: 'arte ' },
+    { iconName: 'fc:customer-support', text: 'dentista ' },
+    { iconName: 'fc:person-running', text: 'atletismo ' },
+    { iconName: 'fc:contacts', text: 'enviar ' },
+    { iconName: 'fc:package', text: 'retirar ' },
+    { iconName: 'fc:planner', text: 'visita ' },
+    { iconName: 'fc:briefcase', text: 'reunión ' },
+    { iconName: 'fc:phone', text: 'llamar ' },
+    { iconName: 'fc:graduation-cap', text: 'colegio ' },
+    { iconName: 'fc:shop', text: 'comida ' },
+  ];
 
   useEffect(() => {
     const storedToken = localStorage.getItem('googleAccessToken');
@@ -40,6 +73,29 @@ export default function SmartCalendarApp() {
       setMessage({ type: 'success', text: '¡Conectado con Google Calendar!' });
     }
   }, []); // El array vacío asegura que se ejecute solo una vez al montar el componente
+
+  useEffect(() => {
+    const days: DayInfo[] = [];
+    const today = new Date();
+    const dayNames = ['DOM', 'LUN', 'MAR', 'MIÉ', 'JUE', 'VIE', 'SÁB'];
+
+    for (let i = -3; i <= 3; i++) {
+        const date = new Date();
+        date.setDate(today.getDate() + i);
+
+        const isToday = i === 0;
+        const dayOfWeek = date.getDay(); // 0 for Sunday
+
+        days.push({
+            date,
+            dayName: dayNames[dayOfWeek],
+            dayNumber: date.getDate(),
+            isToday,
+            isSunday: dayOfWeek === 0,
+        });
+    }
+    setWeekDays(days);
+  }, []);
 
   const handleLoginSuccess = async (tokenResponse: TokenResponse) => {
     setIsProcessing(true);
@@ -114,8 +170,8 @@ export default function SmartCalendarApp() {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${apiKey}`,
-        'HTTP-Referer': 'http://localhost:3000', // Requerido por OpenRouter
-        'X-Title': 'Smart Calendar', // Opcional, pero recomendado por OpenRouter
+        'HTTP-Referer': window.location.origin, // Requerido por OpenRouter. Se adapta al dominio actual.
+        'X-Title': 'Smart Calendar', // Opcional, pero recomendado.
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
@@ -228,16 +284,37 @@ export default function SmartCalendarApp() {
     }
   };
 
+  const handleIconClick = (text: string) => {
+    setInput(prevInput => prevInput ? `${prevInput}${text}` : text);
+    // Opcional: enfocar el textarea después de hacer clic
+    (document.querySelector('.input-textarea') as HTMLTextAreaElement)?.focus();
+  };
+
   return (
     <div className="calendar-app">
       <div className="calendar-wrapper">
         {/* Header */}
         <div className="header">
-          <div className="header-icon">
-            <Calendar />
+          <div className="header-top">
+            <div className="header-icon">
+              <Calendar />
+            </div>
+            <div className="header-text-content">
+              <h1>Calendario Inteligente</h1>
+              <p>Crea eventos con lenguaje natural</p>
+            </div>
           </div>
-          <h1>Calendario Inteligente</h1>
-          <p>Crea eventos con lenguaje natural</p>
+          <div className="week-strip">
+            {weekDays.map((day, index) => (
+              <div 
+                key={index} 
+                className={`day-item ${day.isToday ? 'today' : ''} ${day.isSunday ? 'sunday' : ''}`}
+              >
+                <div className="day-name">{day.dayName}</div>
+                <div className="day-number">{day.dayNumber}</div>
+              </div>
+            ))}
+          </div>
         </div>
 
         {/* Main Card */}
@@ -370,6 +447,18 @@ export default function SmartCalendarApp() {
                   </div>
                 </div>
               )}
+
+              {/* Icon Shortcuts */}
+              <div className="icon-shortcuts">
+                <div className="icon-shortcuts-grid">
+                  {iconShortcuts.map(({ iconName, text }, index) => (
+                    <button key={index} className="icon-shortcut-btn" onClick={() => handleIconClick(text)} title={text.trim()}>
+                      <Icon icon={iconName} />
+                      <span>{text.trim()}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
 
               {/* Examples */}
               <div className="examples">

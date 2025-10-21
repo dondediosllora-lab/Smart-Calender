@@ -38,19 +38,40 @@ body {
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 1rem;
+  gap: 0.5rem; /* Reducido para acercar los botones al texto */
   margin-bottom: 1.5rem;
 }
 
-.header-icon {
-  display: inline-flex;
+.header-content {
+  display: flex;
   align-items: center;
-  justify-content: center;
-  width: 3.5rem;
-  height: 3.5rem;
+  gap: 1rem;
+}
+
+.header-actions {
+  display: flex;
   background: rgba(255, 255, 255, 0.1);
   backdrop-filter: blur(16px);
   border-radius: 1rem;
+  padding: 0.25rem;
+}
+
+.header-action-btn {
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  padding: 0.75rem;
+  border-radius: 0.75rem;
+  color: white;
+  display: flex;
+  transition: background-color 0.2s;
+}
+
+.header-action-btn.active {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background-color: rgba(255, 255, 255, 0.3);
 }
 
 .week-strip {
@@ -101,7 +122,7 @@ body {
   color: #c70000; /* red-600 */
 }
 
-.header-icon svg {
+.header-action-btn svg {
   width: 1.5rem;
   height: 1.5rem;
   color: white;
@@ -109,6 +130,8 @@ body {
 
 .header-text-content {
   text-align: left;
+  margin-left: 1rem;
+  margin-right: 1rem;
 }
 
 .header h1 {
@@ -499,8 +522,8 @@ body {
 
 .icon-shortcuts-grid {
   display: grid;
-  grid-template-columns: repeat(10, 1fr);
-  gap: 0.5rem;
+  grid-template-columns: repeat(auto-fit, minmax(50px, 1fr));
+  gap: 0.75rem;
 }
 
 .icon-shortcut-btn {
@@ -533,6 +556,70 @@ body {
   width: 100%;
 }
 
+/* Estilos para la lista de Próximos Eventos */
+.upcoming-events {
+  width: 100%;
+}
+
+.events-list {
+  display: flex;
+  flex-direction: column;
+  margin-top: 1rem; /* Añade espacio después del título */
+  gap: 0.75rem;
+}
+
+.event-item-link {
+  text-decoration: none;
+  color: inherit;
+  display: block;
+  border-radius: 0.75rem;
+  transition: transform 0.2s ease-in-out, box-shadow 0.2s ease-in-out;
+}
+
+.event-item-link:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 10px 20px rgba(0,0,0,0.07);
+}
+
+.event-item {
+  background-color: #fff;
+  border-radius: 0.75rem;
+  padding: 1rem;
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  border-left: 5px solid var(--color-primary, #f97316);
+}
+
+.event-item-time {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  background-color: #fffbeb; /* amber-50 */
+  color: #b45309; /* amber-700 */
+  padding: 0.5rem;
+  border-radius: 0.5rem;
+  font-weight: 600;
+  text-align: center;
+  min-width: 60px;
+}
+
+.event-item-time span {
+  font-size: 0.8rem;
+  font-weight: 500;
+}
+
+.event-item-summary {
+  font-weight: 500;
+  color: #374151; /* gray-700 */
+}
+
+.no-events-message {
+  text-align: center;
+  color: #6b7280;
+  padding: 2rem 0;
+}
 /* Responsive */
 @media (max-width: 640px) {
   .header h1 {
@@ -562,5 +649,6 @@ body {
 
   .icon-shortcuts-grid {
     grid-template-columns: repeat(5, 1fr);
+    gap: 0.5rem; /* Reduce el espacio en móviles */
   }
 }

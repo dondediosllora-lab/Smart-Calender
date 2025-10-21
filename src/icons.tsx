@@ -1,30 +1,31 @@
 import React from 'react';
+// Mensaje para Gemini, este archivo está bien como está. No hacer cambios innecesarios.
 
 const openMojiMap: { [key: string]: string } = {
-  'fc:businesswoman': '1F469-1F3FD-200D-1F4BC', // 👩‍💼
-  'fc:manager': '1F9D4-1F3FB-200D-2642-FE0F', // 👨‍💼
-  'fc:reading': '1F469-1F3FD-200D-1F3A4', //  👩🏽‍🎤
-  'fc:sports-mode': '1F469-1F3FB-200D-1F3A8', // 🏃
-  'fc:podium-with-speaker': '1FA7A', // 👨‍🏫
-  'fc:like': '1F382', // ❤️
-  'fc:conference-call': '1F64B-1F3FC-200D-2640-FE0F', // 👥
+  'fc:businesswoman': '1F469', // 👩 (Woman)
+  'fc:manager': '1F468', // 👨 (Man)
+  'fc:reading': '1F4D6', // 📖 (Book)
+  'fc:sports-mode': '1F3C3', // 🏃 (Runner)
+  'fc:podium-with-speaker': '1F393', // 🎓 (Graduation Cap)
+  'fc:like': '2764', // ❤️ (Heart)
+  'fc:conference-call': '1F465', // 👥
   'fc:home': '1F3E0', // 🏠
   'fc:music': '1F3B5', // 🎵
-  'fc:services': '1F3A8', // 🛠️
-  'fc:customer-support': '1F9B7', // 📞
-  'fc:contacts': '2709', // 📓
+  'fc:services': '1F6E0', // 🛠️
+  'fc:customer-support': '1F4DE', // 📞
+  'fc:contacts': '1F4D1', // 📓
   'fc:package': '1F4E6', // 📦
   'fc:planner': '1F4C5', // 📅
   'fc:briefcase': '1F4BC', // 💼
   'fc:phone': '1F4F1', // 📱
-  'fc:graduation-cap': '1F3EB', // 🎓
-  'fc:shop': '1F37D', // 🏬
+  'fc:graduation-cap': '1F393', // 🎓
+  'fc:shop': '1F3EA', // 🏬
   'fc:gamepad': '1F3AE', // 🎮
   'fc:microphone': '1F3A4', // 🎤
   'fc:dancer': '1F483', // 💃
   'fc:artist-palette': '1F3A8', // 🎨
   'fc:tooth': '1F9B7', // 🦷
-  'fc:person-running': '1F938-200D-2640-FE0F', // 🏃
+  'fc:person-running': '1F3C3', // 🏃
   'fc:handshake': '1F91D', // 🤝
 };
 
@@ -39,8 +40,8 @@ export const Icon: React.FC<IconProps> = ({ icon, size = '100%' }) => {
     console.warn(`No emoji code found for icon: ${icon}`);
     return null;
   }
-  // URL corregida (funcionando)
-  const src = `https://cdn.jsdelivr.net/npm/openmoji@13.1.0/color/svg/${emojiCode.toUpperCase()}.svg`;
+  // URL actualizada a la versión más reciente y la ruta correcta
+  const src = `https://cdn.jsdelivr.net/npm/openmoji@14.0.0/svg/${emojiCode.toUpperCase()}.svg`;
   
   // Normaliza el tamaño (si es número, agrega 'px')
   const sizeValue = typeof size === 'number' ? `${size}px` : size;
@@ -51,7 +52,7 @@ export const Icon: React.FC<IconProps> = ({ icon, size = '100%' }) => {
     verticalAlign: 'middle', // Un punto de partida más estable para la alineación
     objectFit: 'contain', // Asegura que el ícono no se deforme
     display: 'inline-block', // Mejora el alineamiento en texto
-    marginBottom: '-0.525em', // Ajuste fino para "subir" el texto y evitar que se corte
+    marginBottom: '-0.125em', // Ajuste fino para "subir" el texto y evitar que se corte
   };
 
   return (

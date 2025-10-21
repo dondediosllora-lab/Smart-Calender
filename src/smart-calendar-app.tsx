@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { Calendar, Sparkles, Check, Loader2, AlertCircle, LogOut, Clock } from 'lucide-react';
+import React, { useState, useEffect, useCallback } from 'react';
+import { Calendar, Sparkles, Check, Loader2, AlertCircle, LogOut, Clock, RefreshCw, Plus } from 'lucide-react';
 import { useGoogleLogin } from '@react-oauth/google';
 import { Icon } from './icons';
 import './smart-calendar-app.css';
@@ -15,6 +15,18 @@ interface ExtractedDataState {
   fecha: string;
   hora: string;
   descripcion: string;
+}
+
+interface GoogleCalendarEvent {
+  id: string;
+  summary: string;
+  htmlLink: string;
+  eventType?: string; // Propiedad para identificar eventos autogenerados
+  organizer?: {
+    email?: string;
+    displayName?: string;
+  };
+  start: { dateTime?: string; date?: string; }; // Soporte para eventos de día completo
 }
 
 type TokenResponse = {
@@ -38,6 +50,8 @@ export default function SmartCalendarApp() {
   const [userEmail, setUserEmail] = useState('');
   const [accessToken, setAccessToken] = useState<string | null>(null);
   const [weekDays, setWeekDays] = useState<DayInfo[]>([]);
+  const [upcomingEvents, setUpcomingEvents] = useState<GoogleCalendarEvent[]>([]);
+  const [activeView, setActiveView] = useState<'add' | 'view'>('add');
 
   const iconShortcuts = [
     { iconName: 'fc:businesswoman', text: 'Gaby ' },
@@ -97,6 +111,7 @@ export default function SmartCalendarApp() {
     setWeekDays(days);
   }, []);
 
+
   const handleLoginSuccess = async (tokenResponse: TokenResponse) => {
     setIsProcessing(true);
     try {
@@ -113,7 +128,6 @@ export default function SmartCalendarApp() {
 
       setUserEmail(userInfo.email);
       console.log('✅ Login exitoso. Token de acceso guardado:', tokenResponse.access_token);
-      setMessage({ type: 'success', text: '¡Conectado con Google Calendar!' });
       setAccessToken(tokenResponse.access_token);
     } catch (error) {
       console.error("Error fetching user info:", error);
@@ -140,6 +154,7 @@ export default function SmartCalendarApp() {
     setExtractedData(null);
     setMessage({ type: '', text: '' });
     setAccessToken(null);
+    setUpcomingEvents([]); // Limpiamos la lista de eventos al salir
     setIsProcessing(false);
   };
 
@@ -247,6 +262,71 @@ export default function SmartCalendarApp() {
     return await response.json();
   };
 
+  const fetchUpcomingEvents = useCallback(async () => {
+      if (!accessToken) return;
+  
+      console.log('🗓️ Obteniendo próximos eventos de Google Calendar...');
+      setIsProcessing(true);
+  
+      const timeMin = new Date().toISOString();
+      const apiUrl = new URL('https://www.googleapis.com/calendar/v3/calendars/primary/events');
+      apiUrl.searchParams.append('timeMin', timeMin);
+      apiUrl.searchParams.append('maxResults', '5'); // Muestra solo los primeros 5 eventos
+      apiUrl.searchParams.append('singleEvents', 'true');
+      apiUrl.searchParams.append('orderBy', 'startTime');
+  
+      try {
+        const response = await fetch(apiUrl.toString(), {
+          headers: {
+            'Authorization': `Bearer ${accessToken}`,
+          },
+        });
+  
+        if (!response.ok) {
+          const errorDetails = await response.json();
+          console.error('❌ Error al obtener eventos de Google:', JSON.stringify(errorDetails, null, 2));
+          // Si el error es 401, el token es inválido/expirado. Cerramos la sesión.
+          if (response.status === 401) {
+            console.log('🔑 Token de Google inválido o expirado. Cerrando sesión.');
+            handleLogout(); // Esto limpiará el token inválido y pedirá al usuario que inicie sesión de nuevo.
+          }
+          throw new Error('No se pudieron obtener los eventos.');
+        }
+  
+        const data = await response.json();
+        const events = data.items || [];
+
+        // Filtra los eventos de cumpleaños autogenerados por Google Contacts
+        const filteredEvents = events.filter((event: GoogleCalendarEvent) => {
+          const organizerEmail = event.organizer?.email;
+          // Excluye eventos de calendarios virtuales (cumpleaños, festivos) Y eventos cuyo título sea exactamente "¡Feliz cumpleaños!"
+          const isVirtualCalendar = organizerEmail && organizerEmail.endsWith('@group.v.calendar.google.com');
+          const isBirthdaySummary = event.summary === '¡Feliz cumpleaños!';
+          
+          return !isVirtualCalendar && !isBirthdaySummary;
+        });
+
+        setUpcomingEvents(filteredEvents);
+        console.log('✅ Eventos obtenidos (filtrados):', filteredEvents);
+  
+      } catch (error) {
+        console.error(error);
+        setMessage({
+          type: 'error',
+          text: 'No se pudieron cargar los eventos del calendario.'
+        });
+      } finally {
+        setIsProcessing(false);
+      }
+    }, [accessToken]); // Las demás dependencias (setters) son estables
+
+  useEffect(() => {
+    // Si estamos autenticados y tenemos un token, buscamos los eventos.
+    if (isAuthenticated && accessToken) {
+      fetchUpcomingEvents();
+    }
+  }, [isAuthenticated, accessToken, fetchUpcomingEvents]); // Se ejecuta cuando el estado de autenticación cambia
+
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     if (!input.trim()) {
@@ -264,6 +344,7 @@ export default function SmartCalendarApp() {
       // Llamada real a la API de Google Calendar
       await createGoogleCalendarEvent(data);
       
+      await fetchUpcomingEvents(); // Refrescamos la lista de eventos
       setMessage({ 
         type: 'success', 
         text: '¡Evento creado exitosamente en Google Calendar!' 
@@ -290,21 +371,50 @@ export default function SmartCalendarApp() {
     (document.querySelector('.input-textarea') as HTMLTextAreaElement)?.focus();
   };
 
+  // Función para asignar un color a cada evento según palabras clave en el título
+  const getEventColor = (summary: string): string => {
+    const lowerSummary = summary.toLowerCase();
+    if (['médico', 'dentista', 'visita'].some(keyword => lowerSummary.includes(keyword))) {
+      return '#3b82f6'; // Azul para salud
+    }
+    if (['reunión', 'colegio', 'trabajo'].some(keyword => lowerSummary.includes(keyword))) {
+      return '#22c55e'; // Verde para trabajo/estudios
+    }
+    if (['cumple', 'jugar', 'comida', 'cena', 'amigo'].some(keyword => lowerSummary.includes(keyword))) {
+      return '#ec4899'; // Rosa para social
+    }
+    if (['danza', 'atletismo', 'coro', 'arte', 'deporte'].some(keyword => lowerSummary.includes(keyword))) {
+      return '#f59e0b'; // Ámbar para actividades
+    }
+    if (['enviar', 'retirar', 'llamar'].some(keyword => lowerSummary.includes(keyword))) {
+      return '#6366f1'; // Índigo para tareas
+    }
+    return '#f97316'; // Naranja por defecto
+  };
+
   return (
     <div className="calendar-app">
       <div className="calendar-wrapper">
         {/* Header */}
         <div className="header">
           <div className="header-top">
-            <div className="header-icon">
-              <Calendar />
+            <div className="header-content">
+              <div className="header-actions">
+                <button onClick={() => setActiveView('view')} className={`header-action-btn ${activeView === 'view' ? 'active' : ''}`} title="Ver eventos">
+                  <Calendar />
+                </button>
+                <button onClick={() => setActiveView('add')} className={`header-action-btn ${activeView === 'add' ? 'active' : ''}`} title="Añadir evento">
+                  <Plus />
+                </button>
+              </div>
             </div>
-            <div className="header-text-content">
+            
+            <div className="header-text-content" style={{textAlign: 'left'}}>
               <h1>Calendario Inteligente</h1>
               <p>Crea eventos con lenguaje natural</p>
             </div>
           </div>
-          <div className="week-strip">
+          <div className="week-strip" onClick={() => setActiveView('view')} title="Ver próximos eventos">
             {weekDays.map((day, index) => (
               <div 
                 key={index} 
@@ -350,7 +460,7 @@ export default function SmartCalendarApp() {
             </div>
           ) : (
             <>
-              {/* User Info */}
+              {/* User Info (siempre visible) */}
               <div className="user-info">
                 <div className="user-details">
                   <div className="user-avatar">
@@ -361,145 +471,173 @@ export default function SmartCalendarApp() {
                     <p>{userEmail}</p>
                   </div>
                 </div>
-                <button
-                  onClick={handleLogout}
-                  className="btn-logout"
-                >
+                <button onClick={handleLogout} className="btn-logout">
                   <LogOut />
                 </button>
               </div>
 
-              {/* Input Form */}
-              <form onSubmit={handleSubmit} className="form-container">
-                <div style={{ marginBottom: '1.5rem' }}>
-                  <label className="form-label">
-                    Describe tu tarea o evento
-                  </label>
-                  <div className="input-wrapper">
-                    <textarea
-                      value={input}
-                      onChange={(e) => setInput(e.target.value)}
-                      placeholder="Ej: Reunión con el equipo mañana a las 3pm para revisar el proyecto"
-                      className="input-textarea"
-                      rows={4}
-                      disabled={isProcessing}
-                    />
-                    <Sparkles className="input-icon" />
-                  </div>
-                  <p className="input-hint">
-                    💡 Incluye fecha, hora y detalles en lenguaje natural
-                  </p>
-                </div>
-
-                <button
-                  type="submit"
-                  disabled={isProcessing || !input.trim()}
-                  className="btn-submit"
-                >
-                  {isProcessing ? (
-                    <>
-                      <Loader2 className="spinner" />
-                      Procesando con IA...
-                    </>
-                  ) : (
-                    <>
-                      <Sparkles />
-                      Crear Evento
-                    </>
-                  )}
-                </button>
-              </form>
-
-              {/* Messages */}
-              {message.text && (
-                <div className={`message ${message.type === 'success' ? 'message-success' : 'message-error'}`}>
-                  {message.type === 'success' ? (
-                    <Check />
-                  ) : (
-                    <AlertCircle />
-                  )}
-                  <p>{message.text}</p>
-                </div>
-              )}
-
-              {/* Extracted Data Preview */}
-              {extractedData && (
-                <div className="event-preview">
+              {/* Vista de Próximos Eventos */}
+              {activeView === 'view' && (
+                <div className="upcoming-events">
                   <h3>
-                    <Clock />
-                    Evento Detectado
+                    <Calendar />
+                    Próximos Eventos
+                    <button onClick={() => fetchUpcomingEvents()} className="btn-refresh" title="Refrescar eventos">
+                      <RefreshCw size={16} />
+                    </button>
                   </h3>
-                  <div className="event-details">
-                    <div className="event-field title">
-                      <label>Título</label>
-                      <p>{extractedData.titulo}</p>
-                    </div>
-                    <div className="event-grid">
-                      <div className="event-field">
-                        <label>Fecha</label>
-                        <p>{new Date(extractedData.fecha).toLocaleDateString('es-ES', { weekday: 'short', day: 'numeric', month: 'short' })}</p>
-                      </div>
-                      <div className="event-field">
-                        <label>Hora</label>
-                        <p>{extractedData.hora}</p>
-                      </div>
-                    </div>
-                  </div>
+                  {upcomingEvents.length > 0 ? (
+                    <div className="events-list">
+                      {upcomingEvents
+                        .filter(event => event.start && (event.start.dateTime || event.start.date))
+                        .map(event => {
+                          const startDate = new Date(event.start.dateTime || `${event.start.date}T00:00:00`);
+                          const eventColor = getEventColor(event.summary);
+                          if (isNaN(startDate.getTime())) return null; // Filtra fechas inválidas
+                          const isAllDay = !!event.start.date;
+
+                          return (
+                            <a href={event.htmlLink} target="_blank" rel="noopener noreferrer" key={event.id} className="event-item-link">
+                              <div className="event-item" style={{ borderLeftColor: eventColor }}>
+                                <div className="event-item-time">
+                                  {startDate.toLocaleDateString('es-ES', { weekday: 'short', day: 'numeric' })}
+                                  {!isAllDay && <span>{startDate.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })}</span>}
+                                </div>
+                                <div className="event-item-summary">
+                                  {event.summary}
+                                </div>
+                              </div>
+                            </a>
+                          );
+                        })}
+                            </div>
+                  ) : (
+                    <p className="no-events-message">No hay eventos próximos.</p>
+                  )}
                 </div>
               )}
 
-              {/* Icon Shortcuts */}
-              <div className="icon-shortcuts">
-                <div className="icon-shortcuts-grid">
-                  {iconShortcuts.map(({ iconName, text }, index) => (
-                    <button key={index} className="icon-shortcut-btn" onClick={() => handleIconClick(text)} title={text.trim()}>
-                      <Icon icon={iconName} />
-                      <span>{text.trim()}</span>
-                    </button>
-                  ))}
-                </div>
-              </div>
+              {/* Vista de Añadir Evento */}
+              {activeView === 'add' && (
+                <>
+                   {/* Input Form */}
+                   <form onSubmit={handleSubmit} className="form-container">
+                     <div style={{ marginBottom: '1.5rem' }}>
+                       <label className="form-label">
+                         Describe tu tarea o evento
+                       </label>
+                       <div className="input-wrapper">
+                         <textarea
+                           value={input}
+                           onChange={(e) => setInput(e.target.value)}
+                           placeholder="Ej: Reunión con el equipo mañana a las 3pm para revisar el proyecto"
+                           className="input-textarea"
+                           rows={4}
+                           disabled={isProcessing}
+                         />
+                         <Sparkles className="input-icon" />
+                       </div>
+                       <p className="input-hint">
+                         💡 Incluye fecha, hora y detalles en lenguaje natural
+                       </p>
+                     </div>
+ 
+                     <button
+                       type="submit"
+                       disabled={isProcessing || !input.trim()}
+                       className="btn-submit"
+                     >
+                       {isProcessing ? (
+                         <>
+                           <Loader2 className="spinner" />
+                           Procesando con IA...
+                         </>
+                       ) : (
+                         <>
+                           <Sparkles />
+                           Crear Evento
+                         </>
+                       )}
+                     </button>
+                   </form>
+ 
+                   {/* Messages */}
+                   {message.text && (
+                     <div className={`message ${message.type === 'success' ? 'message-success' : 'message-error'}`}>
+                       {message.type === 'success' ? <Check /> : <AlertCircle />}
+                       <p>{message.text}</p>
+                     </div>
+                   )}
+ 
+                   {/* Extracted Data Preview */}
+                   {extractedData && (
+                     <div className="event-preview">
+                       <h3><Clock /> Evento Detectado</h3>
+                       <div className="event-details">
+                         <div className="event-field title"><label>Título</label><p>{extractedData.titulo}</p></div>
+                         <div className="event-grid">
+                           <div className="event-field"><label>Fecha</label><p>{new Date(extractedData.fecha).toLocaleDateString('es-ES', { weekday: 'short', day: 'numeric', month: 'short' })}</p></div>
+                           <div className="event-field"><label>Hora</label><p>{extractedData.hora}</p></div>
+                         </div>
+                       </div>
+                     </div>
+                   )}
+ 
+                   {/* Icon Shortcuts */}
+                   <div className="icon-shortcuts">
+                     <div className="icon-shortcuts-grid">
+                       {iconShortcuts.map(({ iconName, text }, index) => (
+                         <button key={index} className="icon-shortcut-btn" onClick={() => handleIconClick(text)} title={text.trim()}>
+                           <Icon icon={iconName} />
+                           <span>{text.trim()}</span>
+                         </button>
+                       ))}
+                     </div>
+                   </div>
 
-              {/* Examples */}
-              <div className="examples">
-                <div className="examples-grid">
-                  <div>
-                    <p className="examples-title">Ejemplos de uso:</p>
-                    <div className="examples-list">
-                      {[
-                        'Llevar a Trini a Danza mañana a las 5pm',
-                        'Chiara tiene Atletismo el miercoles a las 16hs',
-                        'Cena con Fran y Gaby el sábado a las 21hs'
-                      ].map((example, i) => (
-                        <button
-                          key={i}
-                          onClick={() => setInput(example)}
-                            className="example-btn"
-                        >
-                          • {example}
-                        </button>
-                      ))}
+                    {/* Examples */}
+                    <div className="examples">
+                      <div className="examples-grid">
+                        <div>
+                          <p className="examples-title">Ejemplos de uso:</p>
+                          <div className="examples-list">
+                            {[
+                              'Llevar a Trini a Danza mañana a las 5pm',
+                              'Chiara tiene Atletismo el miercoles a las 16hs',
+                              'Cena con Fran y Gaby el sábado a las 21hs'
+                            ].map((example, i) => (
+                              <button
+                                key={i}
+                                onClick={() => setInput(example)}
+                                  className="example-btn"
+                              >
+                                • {example}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                        <div>
+                          <p className="examples-title">Plantillas:</p>
+                          <div className="examples-list">
+                            {[
+                              'Llevar a ... a ... el ... a las ...',
+                              'Retirar ... en ... el ... a las ...',
+                              'Visita de ... el ... a las ... en ...'
+                            ].map((template, i) => (
+                              <button key={i} onClick={() => setInput(template)} className="example-btn">
+                                • {template}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      </div>
                     </div>
-                  </div>
-                  <div>
-                    <p className="examples-title">Plantillas:</p>
-                    <div className="examples-list">
-                      {[
-                        'Llevar a ... a ... el ... a las ...',
-                        'Retirar ... en ... el ... a las ...',
-                        'Visita de ... el ... a las ... en ...'
-                      ].map((template, i) => (
-                        <button key={i} onClick={() => setInput(template)} className="example-btn">
-                          • {template}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                </div>
-              </div>
+                  </>
+                )}
             </>
           )}
         </div>
+
 
         {/* Footer */}
         <p className="footer">
